@@ -8,12 +8,12 @@ contract HedgeyCallsV2 is ReentrancyGuard {
     address public uniPair; 
     address public unindex0;
     address public unindex1;
-    address payable public weth = 0x21be370D5312f44cB42ce377BC9b8a0cEF1A4C83; //wrapped ftm 
+    address payable public weth = ''; //input wrapped ETH 
     uint public fee;
     address payable public feeCollector;
     bool public feeCollectorSet;
     uint public c = 0;
-    address public uniFactory = 0xEF45d134b73241eDa7703fa787148D9C9F4950b0; //spirit swap factory
+    address public uniFactory = ; //input AMM factory
     bool private assetWeth;
     bool private pymtWeth;
     bool public cashCloseOn;
