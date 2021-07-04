@@ -8,7 +8,7 @@ contract HedgeyCallsV2 is ReentrancyGuard {
     address public uniPair; 
     address public unindex0;
     address public unindex1;
-    address payable public weth = ''; //input wrapped ETH 
+    address payable public weth = ; //input wrapped ETH 
     uint public fee;
     address payable public feeCollector;
     bool public feeCollectorSet;
