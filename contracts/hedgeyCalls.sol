@@ -262,7 +262,6 @@ contract HedgeyCallsV2 is ReentrancyGuard {
             uint refund = (_price > call.price) ? _price.sub(call.price) : call.price.sub(_price);
             call.assetAmt = _assetAmt;
             call.strike = _strike;
-            call.price = _price;
             call.expiry = _expiry;
             call.totalPurch = _totalPurch;
             call.tradeable = true;
