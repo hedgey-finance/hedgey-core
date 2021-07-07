@@ -1,3 +1,8 @@
+pragma solidity ^0.6.12;
+
+import libraries.sol;
+
+
 contract HedgeyCallsV2 is ReentrancyGuard {
     using SafeMath for uint;
     using SafeERC20 for IERC20;
