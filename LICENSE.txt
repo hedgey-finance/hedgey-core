@@ -1,0 +1,16 @@
+LICENSE 
+
+EXPLICIT LICENSING AGREEMENT
+
+HEDGEY FINANCE INC. (the "Company")
+
+
+ANY USE OF THIS CODEBASE OR REPOSITORY OR FORKING OF THIS REPOSITORY IS STRICLTY PROHIBITED WITHOUT WRITTENT PRIOR CONSENT.
+
+The Company will grant explicit licensing agreements to commercial and non-commercial users on an as needed basis to develop, use and proliferate the codebase
+contained within. Under no circumstances shall any person(s) fork, copy, use, or maintain this codebase or any lines contained into their (his/hers) project without
+explicit prior written consent from the Company. This Code is not guaranteed to work, be sufficienlty stable, or secure and in no way shall the Company be liable
+for any usage of this code that may cause fincial or other vulnerabilities. The Company does not insure and shall be held harmless against any loss, financial or 
+other, arising from the usage of the code maintained within this repository.
+
+Under no circumstances should you use this code without explicit consent of the Company. You will be liable for any actions taken without explicit consent.
