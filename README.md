@@ -34,9 +34,9 @@ wBNB: 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c
 
 Pancake Swap Factory Address: 0xBCfCcbde45cE874adCB698cC183deBcF17952812
 
-**Fantom Network:
+**Fantom Network**:
 
-SPOOKY SWAP HEDGEY FACTORIES:**
+**SPOOKY SWAP HEDGEY FACTORIES:**
 
 Calls Factory: https://ftmscan.com/address/0xf97871d9777734c8a71e1ea4a92d2e90c1ee7fb2
 
