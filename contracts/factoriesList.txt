@@ -1,4 +1,4 @@
-Below is the list of deployed factories on the various networks. 
+This is the deployed factories for each network and some basic information of the connected AMM / wrapped base currency. Contracts folder contains currently deployed calls & puts contracts, as well as some work in progress contracts to be released during this V1 phase ahead of V2 for additional product offerings prior to a full V2 release. 
 
 
 
