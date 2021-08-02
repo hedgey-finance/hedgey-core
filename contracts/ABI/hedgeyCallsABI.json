@@ -1,4 +1,5 @@
 {
+  "contractName": "HedgeyCallsV2",
   "abi": [
     {
       "inputs": [
