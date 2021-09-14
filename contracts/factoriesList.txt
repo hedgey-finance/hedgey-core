@@ -75,4 +75,14 @@ wrapped AVAX: 0xB31f66AA3C1e785363F0875A1B74E27b85FD66c7
 Pangolin Swap Factory: 0xefa94DE7a4656D787667C749f7E1223D71E9FD88
 
 
+**CELO EVM MAINNET**
+Cals Factory:
+
+Puts Factory:
+
+wrapped CELO: THERE IS NONE!!!! CELO IS AN ERC-20 ITSELF
+
+UBESWAP FACTORY: https://explorer.celo.org/address/0xe3d8bd6aed4f159bc8000a9cd47cffdb95f96121/transactions
+
+
 
