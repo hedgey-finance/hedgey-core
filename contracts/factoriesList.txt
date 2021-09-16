@@ -75,8 +75,19 @@ wrapped AVAX: 0xB31f66AA3C1e785363F0875A1B74E27b85FD66c7
 Pangolin Swap Factory: 0xefa94DE7a4656D787667C749f7E1223D71E9FD88
 
 
+**OKEX Chain (OEC)**
+Calls Factory:
+
+Puts Factory:
+
+wrapped OKT: 0x8F8526dbfd6E38E3D8307702cA8469Bae6C56C15
+
+Cherry Swap Factory: 0x709102921812B3276A65092Fe79eDfc76c4D4AFe
+
+
+
 **CELO EVM MAINNET**
-Cals Factory:
+Calls Factory:
 
 Puts Factory:
 
