@@ -76,9 +76,9 @@ Pangolin Swap Factory: 0xefa94DE7a4656D787667C749f7E1223D71E9FD88
 
 
 **OKEX Chain (OEC)**
-Calls Factory:
+Calls Factory: https://www.oklink.com/okexchain/address/0x93468e8ffae4abac59a6e8d26df25d4a66d7cf79
 
-Puts Factory:
+Puts Factory: https://www.oklink.com/okexchain/address/0xbc832a7fef67c71d35773ca16a8a8ec660d49648
 
 wrapped OKT: 0x8F8526dbfd6E38E3D8307702cA8469Bae6C56C15
 
