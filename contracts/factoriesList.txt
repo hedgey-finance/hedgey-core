@@ -55,13 +55,21 @@ Spirit swap factory address: 0xEF45d134b73241eDa7703fa787148D9C9F4950b0
 
 **XDAI Network:**
 
-Calls Factory: https://blockscout.com/xdai/mainnet/address/0xa128206F8c3C71FDE53F4A306e415d768943d257/transactions
+HoneySwap Calls Factory: https://blockscout.com/xdai/mainnet/address/0xa128206F8c3C71FDE53F4A306e415d768943d257/transactions
 
-Puts Factory: https://blockscout.com/xdai/mainnet/address/0xbc832a7Fef67c71d35773Ca16a8A8Ec660d49648/transactions
+HoneySwap Puts Factory: https://blockscout.com/xdai/mainnet/address/0xbc832a7Fef67c71d35773Ca16a8A8Ec660d49648/transactions
+
+ElkFinance Calls Factory: 0x8D28DbC3e9843e1661402ef661bBEB42e4e6b36E
+
+ElkFinance Puts Factory: 0x03740220D70ef6E07A40b3E028fF9A13cA4Ae78f
 
 wrapped xDAI: 0xe91D153E0b41518A2Ce8Dd3D7944Fa863463a97d
 
 Honeyswap factory address: 0xA818b4F111Ccac7AA31D0BCc0806d64F2E0737D7
+
+Elk Finance factory address: 0xCB018587dA9590A18f49fFE2b85314c33aF3Ad3B
+
+
 
 
 **AVALANCHE NETWORK**
