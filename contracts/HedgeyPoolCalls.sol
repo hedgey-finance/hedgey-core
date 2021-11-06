@@ -1037,7 +1037,7 @@ contract HedgeyCalls is ReentrancyGuard {
 
 pragma solidity ^0.6.12;
 
-contract HedgeyCallsFactoryV2 {
+contract HedgeyCallsFactory {
     
     mapping(address => mapping(address => address)) public pairs;
     address[] public totalContracts;
