@@ -319,16 +319,34 @@ contract HedgeyCeloPuts is ReentrancyGuard {
     
     function buyNewOption(uint _p, uint _assetAmt, uint _strike, uint _price, uint _expiry) public {
         Put storage put = puts[_p];
-        require(put.strike == _strike && put.assetAmt == _assetAmt && put.price == _price && put.expiry == _expiry, "p details mismatch: something has changed before execution");
+        require(put.strike == _strike && _assetAmt > 0 && put.price == _price && put.expiry == _expiry, "p details mismatch: something has changed before execution");
         require(put.expiry > now, "p: This put is already expired");
         require(!put.exercised, "p: This has already been exercised");
         require(put.tradeable, "p: this is not ready to trade");
         require(msg.sender != put.short, "p: you are the short");
         require(put.short != address(0x0) && put.short == put.long, "p: this is not a newAsk");
         require(!put.open, "p: This put is already open");
-        uint balCheck = IERC20(pymtCurrency).balanceOf(msg.sender);
-        require(balCheck >= put.price, "p: not enough to buy this put");
-        transferPymtWithFee(pymtCurrency, msg.sender, put.short, _price);
+        if(_assetAmt == put.assetAmt) {
+            uint balCheck = IERC20(pymtCurrency).balanceOf(msg.sender);
+            require(balCheck >= put.price, "p: not enough to buy this put");
+            transferPymtWithFee(pymtCurrency, msg.sender, put.short, _price);
+        } else {
+            uint proRataPurchase = _assetAmt.mul(10 ** assetDecimals).div(put.assetAmt);
+            uint proRataPrice = _price.mul(proRataPurchase).div(10 ** assetDecimals);
+            uint remainingPrice = _price.sub(proRataPrice);
+            uint balCheck = IERC20(pymtCurrency).balanceOf(msg.sender);
+            require(balCheck >= proRataPrice, "p: not enough to sell this call option");
+            uint proRataTotalPurchase = put.totalPurch.mul(proRataPurchase).div(10 ** assetDecimals);
+            require(proRataTotalPurchase > 0 && put.totalPurch.sub(proRataTotalPurchase) > 0, "p: pro rata purchase error");
+            transferPymtWithFee(pymtCurrency, msg.sender, put.short, proRataPrice);
+            //setup new call
+            puts[p++] = Put(put.long, put.assetAmt.sub(_assetAmt), put.strike, put.totalPurch.sub(proRataTotalPurchase), remainingPrice, _expiry, false, true, put.long, false);
+            emit NewAsk(p.sub(1), put.assetAmt.sub(_assetAmt), _strike, remainingPrice, _expiry);
+            put.assetAmt = _assetAmt;
+            put.price = proRataPrice;
+            put.totalPurch = proRataTotalPurchase;
+        }
+        
         put.open = true; 
         put.long = msg.sender; 
         put.tradeable = false; 
@@ -564,3 +582,43 @@ contract HedgeyCeloPuts is ReentrancyGuard {
 
 
 
+
+contract HedgeyCeloPutsFactory {
+    
+    mapping(address => mapping(address => address)) public pairs;
+    address[] public totalContracts;
+    address payable public collector;
+    uint public fee;
+
+    constructor (address payable _collector, uint _fee) public {
+        collector = _collector;
+        fee = _fee;
+    }
+    
+    function changeFee(uint _newFee) public {
+        require(msg.sender == collector, "only the collector");
+        fee = _newFee;
+    }
+
+    function changeCollector(address payable _collector, bool _set) public {
+        require(msg.sender == collector, "only the collector");
+        collector = _collector;
+    }
+   
+    
+    function getPair(address asset, address pymtCurrency) public view returns (address pair) {
+        pair = pairs[asset][pymtCurrency];
+    }
+    
+
+    function createContract(address asset, address pymtCurrency) public {
+        require(asset != pymtCurrency, "same currencies");
+        require(pairs[asset][pymtCurrency] == address(0), "contract exists");
+        HedgeyCeloPuts putContract = new HedgeyCeloPuts(asset, pymtCurrency, collector, fee);
+        pairs[asset][pymtCurrency] = address(putContract);
+        totalContracts.push(address(putContract));
+        emit NewPairCreated(asset, pymtCurrency, address(putContract));
+    }
+
+    event NewPairCreated(address _asset, address _pymtCurrency, address _pair);
+}
