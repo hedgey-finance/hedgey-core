@@ -216,7 +216,7 @@ contract HedgeyCalls is ReentrancyGuard {
         uint balCheck = assetWeth ? msg.value : IERC20(asset).balanceOf(msg.sender);
         require(balCheck >= call.assetAmt, "c: not enough cash to bid");
         depositPymt(assetWeth, asset, msg.sender, call.assetAmt);
-        SafeERC20.safeTransfer(IERC20(pymtCurrency), feeCollector, feePymt);
+        if (feePymt > 0) SafeERC20.safeTransfer(IERC20(pymtCurrency), feeCollector, feePymt);
         withdrawPymt(pymtWeth, pymtCurrency, msg.sender, shortPymt);
         call.short = msg.sender;
         call.tradeable = false;
