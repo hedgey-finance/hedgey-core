@@ -23,11 +23,11 @@ contract HedgeyCalls is ReentrancyGuard {
     address public uniPair; 
     address public unindex0;
     address public unindex1;
-    address payable public weth = 0xc778417E063141139Fce010982780140Aa0cD5Ab;    
+    address payable public weth =; //weth address    
     uint public fee;
     address payable public feeCollector;
     uint public c = 0;
-    address public uniFactory = 0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f; 
+    address public uniFactory =; //AMM factory address
     bool private assetWeth;
     bool private pymtWeth;
     bool public cashCloseOn;
