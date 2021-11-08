@@ -505,13 +505,13 @@ contract HedgeyAnySwap is ReentrancyGuard {
     
     
     function uniswapV2Call(address sender, uint amount0, uint amount1, bytes memory data) external {
-        //assume we've received the amount needed to exercise the call with was amountOut from tokenOut above
+        
         address token0 = IUniswapV2Pair(msg.sender).token0(); // fetch the address of token0
         address token1 = IUniswapV2Pair(msg.sender).token1(); // fetch the address of token1
         (uint reserveA, uint reserveB) = getReserves(token0, token1);
         assert(msg.sender == IUniswapV2Factory(factory).getPair(token0, token1));
         (address _hedgey, uint _n, address[] memory path, bool optionType) = abi.decode(data, (address, uint, address[], bool));
-        //the final param distinguishes calls vs puts, a 0 == call, 1 == put
+        
         uint amountDue = amount0 == 0 ? getAmountIn(amount1, reserveA, reserveB) : getAmountIn(amount0, reserveB, reserveA);
         uint purchase = amount0 == 0 ? amount1 : amount0;
         if (optionType) {
@@ -531,7 +531,7 @@ contract HedgeyAnySwap is ReentrancyGuard {
     
     
     function exerciseCall(address hedgeyCalls, uint _c, uint purchase) internal returns (address asset, uint assetAmount) {
-        //require only the owner of the call can exercise
+        
         SafeERC20.safeIncreaseAllowance(IERC20(IHedgey(hedgeyCalls).pymtCurrency()), hedgeyCalls, purchase); //approve that we can spend the payment currency
         IHedgey(hedgeyCalls).exercise(_c); //exercise call - gives us back the asset
         asset = IHedgey(hedgeyCalls).asset();
@@ -549,18 +549,16 @@ contract HedgeyAnySwap is ReentrancyGuard {
     
     
     function hedgeyCallSwap(address originalOwner, uint _c, uint totalPurchase, address[] memory path, bool cashBack) external nonReentrant {
-        //first we call the flash swap to get our cash and exercise and repay
-        //we need to encode the hedgey address, uint and path into calldata but we don't want the last payment currency because we'll be sending in the paired currency to the pool directly
-        //this saves us from calculating the LP additional fees sending in the borrowed currency which is typically 39 bps instead of 30 bps
+   
         address[] memory _path = new address[](path.length - 1);
         for (uint i; i < path.length - 1; i++) {
             _path[i] = path[i];
         }
         bytes memory data = abi.encode(msg.sender, _c, _path, true);
         flashSwap(path[path.length - 2], path[path.length - 1], totalPurchase, data);
-        //then we send the profits to the original owner
+        
         if(cashBack) {
-            //swap again converting remaining asset into cash and delivering that out
+            
             multiSwap(path, 0, IERC20(path[0]).balanceOf(address(this)), originalOwner);
         } else {
             SafeERC20.safeTransfer(IERC20(path[0]), originalOwner, IERC20(path[0]).balanceOf(address(this)));
@@ -568,7 +566,7 @@ contract HedgeyAnySwap is ReentrancyGuard {
     }
     
     function hedgeyPutSwap(address originalOwner, uint _p, uint assetAmount, address[] memory path) external nonReentrant {
-        //path goes from payment currency → intermediary → asset
+        
         address[] memory _path = new address[](path.length - 1);
         for (uint i; i < path.length - 1; i++) {
             _path[i] = path[i];
