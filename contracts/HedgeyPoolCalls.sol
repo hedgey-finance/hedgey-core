@@ -123,7 +123,7 @@ contract HedgeyCalls is ReentrancyGuard {
             require(msg.value == _total, "transfer issue: wrong amount of eth sent");
         }
         transferPymt(_isWETH, _token, from, to, _amt); //transfer the stub to recipient
-        transferPymt(_isWETH, _token, from, feeCollector, _fee); //transfer fee to fee collector
+        if (_fee > 0) transferPymt(_isWETH, _token, from, feeCollector, _fee); //transfer fee to fee collector
     }
 
 
@@ -193,7 +193,7 @@ contract HedgeyCalls is ReentrancyGuard {
         uint feePymt = (newBid.price * fee).div(1e4);
         uint shortPymt = newBid.price.sub(feePymt);
         withdrawPymt(pymtWeth, pymtCurrency, openCall.long, shortPymt);
-        SafeERC20.safeTransfer(IERC20(pymtCurrency), feeCollector, feePymt);
+        if (feePymt > 0) SafeERC20.safeTransfer(IERC20(pymtCurrency), feeCollector, feePymt);
         openCall.long = newBid.long;
         openCall.price = newBid.price;
         openCall.tradeable = false;
