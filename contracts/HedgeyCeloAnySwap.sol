@@ -515,12 +515,12 @@ contract HedgeyAnySwap is ReentrancyGuard {
         uint amountDue = amount0 == 0 ? getAmountIn(amount1, reserveA, reserveB) : getAmountIn(amount0, reserveB, reserveA);
         uint purchase = amount0 == 0 ? amount1 : amount0;
         if (optionType) {
-            (address asset, uint assetAmount) = exerciseCall(_hedgey, _n, purchase); //exercises the call given the input data
+            (address asset) = exerciseCall(_hedgey, _n, purchase); //exercises the call given the input data
             require(IERC20(asset).balanceOf(address(this)) > amountDue, "there is not enough asset to convert");
             multiSwap(path, amountDue, 0, msg.sender);
         } else {
             // must be a put
-            (address paymentCurrency, uint totalPurchase) = exercisePut(_hedgey, _n, purchase);
+            (address paymentCurrency) = exercisePut(_hedgey, _n, purchase);
             require(IERC20(paymentCurrency).balanceOf(address(this)) > amountDue, "not enough cash to payback the short");
             multiSwap(path, amountDue, 0, msg.sender);
         }
@@ -530,21 +530,21 @@ contract HedgeyAnySwap is ReentrancyGuard {
     
     
     
-    function exerciseCall(address hedgeyCalls, uint _c, uint purchase) internal returns (address asset, uint assetAmount) {
+    function exerciseCall(address hedgeyCalls, uint _c, uint purchase) internal returns (address asset) {
         
         SafeERC20.safeIncreaseAllowance(IERC20(IHedgey(hedgeyCalls).pymtCurrency()), hedgeyCalls, purchase); //approve that we can spend the payment currency
         IHedgey(hedgeyCalls).exercise(_c); //exercise call - gives us back the asset
         asset = IHedgey(hedgeyCalls).asset();
-        assetAmount = IERC20(asset).balanceOf(address(this)); //gets our balance of the asset that's been paid to us
+        
     }
     
     
-    function exercisePut(address hedgeyPuts, uint _p, uint purchase) internal returns (address paymentCurrency, uint totalPurchase) {
+    function exercisePut(address hedgeyPuts, uint _p, uint purchase) internal returns (address paymentCurrency) {
         
         SafeERC20.safeIncreaseAllowance(IERC20(IHedgey(hedgeyPuts).asset()), hedgeyPuts, purchase); //approve that we can spend the payment currency
         IHedgey(hedgeyPuts).exercise(_p);
         paymentCurrency = IHedgey(hedgeyPuts).pymtCurrency();
-        totalPurchase = IERC20(paymentCurrency).balanceOf(address(this));
+        
     }
     
     
