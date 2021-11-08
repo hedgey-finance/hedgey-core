@@ -2,6 +2,7 @@ pragma solidity ^0.6.12;
 
 import libraries.sol;
 
+
 interface IWETH {
     function deposit() external payable;
     function transfer(address to, uint value) external returns (bool);
@@ -23,11 +24,11 @@ contract HedgeyCalls is ReentrancyGuard {
     address public uniPair; 
     address public unindex0;
     address public unindex1;
-    address payable public weth =; //weth address    
+    address payable public weth = 0xc778417E063141139Fce010982780140Aa0cD5Ab; //weth address    
     uint public fee;
     address payable public feeCollector;
     uint public c = 0;
-    address public uniFactory =; //AMM factory address
+    address public uniFactory = 0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f; //AMM factory address
     bool private assetWeth;
     bool private pymtWeth;
     bool public cashCloseOn;
@@ -61,6 +62,7 @@ contract HedgeyCalls is ReentrancyGuard {
     struct Call {
         address payable short;
         uint assetAmt;
+        uint minimumPurchase;
         uint strike;
         uint totalPurch;
         uint price;
@@ -141,12 +143,8 @@ contract HedgeyCalls is ReentrancyGuard {
         uniPair = IUniswapV2Factory(uniFactory).getPair(asset, pymtCurrency);
         if (uniPair == address(0x0)) {
             cashCloseOn = false;
-            unindex0 = address(0x0);
-            unindex1 = address(0x0);
         } else {
             cashCloseOn = true;
-            unindex0 = IUniswapV2Pair(uniPair).token0();
-            unindex1 = IUniswapV2Pair(uniPair).token1();
         }
         emit AMMUpdate(cashCloseOn);
         
@@ -161,8 +159,8 @@ contract HedgeyCalls is ReentrancyGuard {
         uint balCheck = pymtWeth ? msg.value : IERC20(pymtCurrency).balanceOf(msg.sender);
         require(balCheck >= _price, "c: not enough cash to bid");
         depositPymt(pymtWeth, pymtCurrency, msg.sender, _price); 
-        calls[c++] = Call(address(0x0), _assetAmt, _strike, _totalPurch, _price, _expiry, false, true, msg.sender, false);
-        emit NewBid(c.sub(1), _assetAmt, _strike, _price, _expiry);
+        calls[c++] = Call(address(0x0), _assetAmt, _assetAmt, _strike, _totalPurch, _price, _expiry, false, true, msg.sender, false);
+        emit NewBid(c.sub(1), _assetAmt, _assetAmt, _strike, _price, _expiry);
     }
     
     //function to cancel a new bid
@@ -227,7 +225,7 @@ contract HedgeyCalls is ReentrancyGuard {
     }
 
 
-    function changeNewOption(uint _c, uint _assetAmt, uint _strike, uint _price, uint _expiry) payable public nonReentrant {
+    function changeNewOption(uint _c, uint _assetAmt, uint _minimumPurchase, uint _strike, uint _price, uint _expiry) payable public nonReentrant {
         Call storage call = calls[_c];
         require(call.long == msg.sender, "c: you do not own this call");
         require(!call.exercised, "c: this has been exercised");
@@ -235,6 +233,7 @@ contract HedgeyCalls is ReentrancyGuard {
         require(call.tradeable, "c: this is not a tradeable option");
         uint _totalPurch = _assetAmt.mul(_strike).div(10 ** assetDecimals);
         require(_totalPurch > 0, "c: totalPurchase error: too small amount");
+        require(_minimumPurchase.mul(_strike).div(10 ** assetDecimals) > 0, "c: minimum purchase error, too small of a minimum");
         //lets check if this is a new ask or new bid
         //if its a newAsk
         if (msg.sender == call.short) {
@@ -242,6 +241,7 @@ contract HedgeyCalls is ReentrancyGuard {
             call.strike = _strike;
             call.price = _price;
             call.expiry = _expiry;
+            call.minimumPurchase = _minimumPurchase;
             call.totalPurch = _totalPurch;
             call.tradeable = true;
             if (call.assetAmt > _assetAmt) {
@@ -260,6 +260,7 @@ contract HedgeyCalls is ReentrancyGuard {
             //its a newBid
             uint refund = (_price > call.price) ? _price.sub(call.price) : call.price.sub(_price);
             call.assetAmt = _assetAmt;
+            call.minimumPurchase = _assetAmt;
             call.strike = _strike;
             call.expiry = _expiry;
             call.totalPurch = _totalPurch;
@@ -280,14 +281,16 @@ contract HedgeyCalls is ReentrancyGuard {
     }
 
     //function to write a new call
-    function newAsk(uint _assetAmt, uint _strike, uint _price, uint _expiry) payable public {
+    function newAsk(uint _assetAmt, uint _minimumPurchase, uint _strike, uint _price, uint _expiry) payable public {
         uint _totalPurch = _assetAmt.mul(_strike).div(10 ** assetDecimals);
         require(_totalPurch > 0, "c: totalPurchase error: too small amount");
+        require(_minimumPurchase.mul(_strike).div(10 ** assetDecimals) > 0, "c: minimum purchase error, too small of a min");
+        require(_assetAmt % _minimumPurchase == 0, "c: asset amount needs to be a multiple of the minimum");
         uint balCheck = assetWeth ? msg.value : IERC20(asset).balanceOf(msg.sender);
         require(balCheck >= _assetAmt, "c: not enough to sell this call option");
         depositPymt(assetWeth, asset, msg.sender, _assetAmt);
-        calls[c++] = Call(msg.sender, _assetAmt, _strike, _totalPurch, _price, _expiry, false, true, msg.sender, false);
-        emit NewAsk(c.sub(1), _assetAmt, _strike, _price, _expiry);
+        calls[c++] = Call(msg.sender, _assetAmt, _minimumPurchase, _strike, _totalPurch, _price, _expiry, false, true, msg.sender, false);
+        emit NewAsk(c.sub(1), _assetAmt, _minimumPurchase, _strike, _price, _expiry);
     }
 
 
@@ -314,22 +317,23 @@ contract HedgeyCalls is ReentrancyGuard {
         require(!call.exercised, "c: This has already been exercised");
         require(call.tradeable, "c: This isnt tradeable yet");
         require(!call.open, "c: This call is already open");
+        require(_assetAmt >= call.minimumPurchase, "purchase size does not meet minimum");
         if (_assetAmt == call.assetAmt) {
             uint balCheck = pymtWeth ? msg.value : IERC20(pymtCurrency).balanceOf(msg.sender);
-            require(balCheck >= call.price, "c: not enough to buy this call option");
+            require(balCheck >= call.price, "c: not enough to sell this call option");
             transferPymtWithFee(pymtWeth, pymtCurrency, msg.sender, call.short, _price);
         } else {
             uint proRataPurchase = _assetAmt.mul(10 ** assetDecimals).div(call.assetAmt);
             uint proRataPrice = _price.mul(proRataPurchase).div(10 ** assetDecimals);
             uint remainingPrice = _price.sub(proRataPrice);
             uint balCheck = pymtWeth ? msg.value : IERC20(pymtCurrency).balanceOf(msg.sender);
-            require(balCheck >= proRataPrice, "c: not enough to buy this call option");
+            require(balCheck >= proRataPrice, "c: not enough to sell this call option");
             uint proRataTotalPurchase = call.totalPurch.mul(proRataPurchase).div(10 ** assetDecimals);
             require(proRataTotalPurchase > 0 && call.totalPurch.sub(proRataTotalPurchase) > 0, "c: pro rata purchase error");
             transferPymtWithFee(pymtWeth, pymtCurrency, msg.sender, call.short, proRataPrice);
             //setup new call
-            calls[c++] = Call(call.long, call.assetAmt.sub(_assetAmt), call.strike, call.totalPurch.sub(proRataTotalPurchase), remainingPrice, _expiry, false, true, call.long, false);
-            emit NewAsk(c.sub(1), call.assetAmt.sub(_assetAmt), _strike, remainingPrice, _expiry);
+            calls[c++] = Call(call.long, call.assetAmt.sub(_assetAmt), call.minimumPurchase, call.strike, call.totalPurch.sub(proRataTotalPurchase), remainingPrice, _expiry, false, true, call.long, false);
+            emit NewAsk(c.sub(1), call.assetAmt.sub(_assetAmt), call.minimumPurchase, _strike, remainingPrice, _expiry);
             call.assetAmt = _assetAmt;
             call.price = proRataPrice;
             call.totalPurch = proRataTotalPurchase;
@@ -485,7 +489,7 @@ contract HedgeyCalls is ReentrancyGuard {
     }
 
     //function to roll expired call into a new short contract
-    function rollExpired(uint _c, uint _assetAmt, uint _newStrike, uint _price, uint _newExpiry) payable public nonReentrant {
+    function rollExpired(uint _c, uint _assetAmt, uint _minimumPurchase, uint _newStrike, uint _price, uint _newExpiry) payable public nonReentrant {
         Call storage call = calls[_c]; 
         require(!call.exercised, "c: This has been exercised");
         require(call.expiry < now, "c: Not expired yet"); 
@@ -505,8 +509,8 @@ contract HedgeyCalls is ReentrancyGuard {
             depositPymt(assetWeth, asset, msg.sender, refund); 
         }
         
-        calls[c++] = Call(msg.sender, _assetAmt, _newStrike, _totalPurch, _price, _newExpiry, false, true, msg.sender, false);
-        emit OptionRolled(_c, c.sub(1), _assetAmt, _newStrike, _price, _newExpiry);
+        calls[c++] = Call(msg.sender, _assetAmt, _minimumPurchase, _newStrike, _totalPurch, _price, _newExpiry, false, true, msg.sender, false);
+        emit OptionRolled(_c, c.sub(1), _assetAmt, _minimumPurchase, _newStrike, _price, _newExpiry);
     }
 
 
@@ -559,8 +563,8 @@ contract HedgeyCalls is ReentrancyGuard {
     }
 
    /***events*****/
-    event NewBid(uint _i, uint _assetAmt, uint _strike, uint _price, uint _expiry);
-    event NewAsk(uint _i, uint _assetAmt, uint _strike, uint _price, uint _expiry);
+    event NewBid(uint _i, uint _assetAmt, uint _minimumPurchase, uint _strike, uint _price, uint _expiry);
+    event NewAsk(uint _i, uint _assetAmt, uint _minimumPurchase, uint _strike, uint _price, uint _expiry);
     event NewOptionSold(uint _i);
     event NewOptionBought(uint _i);
     event OpenOptionSold(uint _i, uint _j, address _long, uint _price);
@@ -569,7 +573,7 @@ contract HedgeyCalls is ReentrancyGuard {
     event OptionChanged(uint _i, uint _assetAmt, uint _strike, uint _price, uint _expiry);
     event PriceSet(uint _i, uint _price, bool _tradeable);
     event OptionExercised(uint _i, bool cashClosed);
-    event OptionRolled(uint _i, uint _j, uint _assetAmt, uint _strike, uint _price, uint _expiry);
+    event OptionRolled(uint _i, uint _j, uint _assetAmt, uint _minimumPurchase, uint _strike, uint _price, uint _expiry);
     event OptionReturned(uint _i);
     event OptionCancelled(uint _i);
     event OptionTransferred(uint _i, address newOwner);
