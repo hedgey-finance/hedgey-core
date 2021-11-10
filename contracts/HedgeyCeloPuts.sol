@@ -3,11 +3,6 @@ pragma solidity ^0.6.12;
 import libraries.sol
 
 
-interface IHedgeySwap {
-    function hedgeyPutSwap(address originalOwner, uint _c, uint _totalPurchase, address[] memory path) external;
-}
-
-
 contract HedgeyCeloPuts is ReentrancyGuard {
     using SafeMath for uint;
     using SafeERC20 for IERC20;
@@ -26,7 +21,7 @@ contract HedgeyCeloPuts is ReentrancyGuard {
 
 
     constructor(address _asset, address _pymtCurrency, address _feeCollector, uint _fee) public {
-        
+        require(_asset != _pymtCurrency);
         asset = _asset;
         pymtCurrency = _pymtCurrency;
         feeCollector = _feeCollector;
@@ -44,6 +39,7 @@ contract HedgeyCeloPuts is ReentrancyGuard {
     struct Put {
         address short;
         uint assetAmt;
+        uint minimumPurchase;
         uint strike;
         uint totalPurch;
         uint price;
@@ -102,16 +98,13 @@ contract HedgeyCeloPuts is ReentrancyGuard {
     }
 
     //admin function to update the fee amount
-    function changeFee(uint _fee) external {
+    function changeFee(uint _fee, address _collector) external {
         require(msg.sender == feeCollector);
         fee = _fee;
-    }
-
-    function changeCollector(address _collector) external {
-        require(msg.sender == feeCollector);
         feeCollector = _collector;
     }
 
+    
     function updateAMM() public {
         uniPair = IUniswapV2Factory(uniFactory).getPair(asset, pymtCurrency);
         if (uniPair == address(0x0)) {
@@ -145,8 +138,8 @@ contract HedgeyCeloPuts is ReentrancyGuard {
         uint balCheck = IERC20(pymtCurrency).balanceOf(msg.sender);
         require(balCheck >= _price, "p: insufficent purchase cash");
         depositPymt(pymtCurrency, msg.sender, _price); //handles weth and token deposits into contract
-        puts[p++] = Put(address(0x0), _assetAmt, _strike, _totalPurch, _price, _expiry, false, true, msg.sender, false);
-        emit NewBid(p.sub(1), _assetAmt, _strike, _price, _expiry);
+        puts[p++] = Put(address(0x0), _assetAmt, _assetAmt, _strike, _totalPurch, _price, _expiry, false, true, msg.sender, false);
+        emit NewBid(p.sub(1), _assetAmt, _assetAmt, _strike, _price, _expiry);
         calculateLastBalances();
     }
 
@@ -184,9 +177,7 @@ contract HedgeyCeloPuts is ReentrancyGuard {
         uint feePymt = (newBid.price * fee).div(1e4);
         uint remainder = newBid.price.sub(feePymt);
         withdrawPymt(pymtCurrency, openPut.long, remainder);
-        if (feePymt > 0) {
-            SafeERC20.safeTransfer(IERC20(pymtCurrency), feeCollector, feePymt);
-        }
+        if (feePymt > 0) SafeERC20.safeTransfer(IERC20(pymtCurrency), feeCollector, feePymt);
         if (openPut.short == newBid.long) {
             withdrawPymt(pymtCurrency, openPut.short, openPut.totalPurch);
             openPut.exercised = true;
@@ -219,9 +210,7 @@ contract HedgeyCeloPuts is ReentrancyGuard {
         uint balCheck = IERC20(pymtCurrency).balanceOf(msg.sender);
         require(balCheck >= shortPymt, "p: sell new option: insufficent collateral");
         depositPymt(pymtCurrency, msg.sender, shortPymt);
-        if (feePymt > 0) {
-            SafeERC20.safeTransfer(IERC20(pymtCurrency), feeCollector, feePymt);
-        }
+        if (feePymt > 0) SafeERC20.safeTransfer(IERC20(pymtCurrency), feeCollector, feePymt);
         put.open = true;
         put.short = msg.sender;
         put.tradeable = false;
@@ -230,7 +219,7 @@ contract HedgeyCeloPuts is ReentrancyGuard {
     }
 
 
-    function changeNewOption(uint _p, uint _assetAmt, uint _strike, uint _price, uint _expiry) public nonReentrant {
+    function changeNewOption(uint _p, uint _assetAmt, uint _minimumPurchase, uint _strike, uint _price, uint _expiry) public nonReentrant {
         calculateDifferences();
         Put storage put = puts[_p];
         require(put.long == msg.sender, "p: you do not own this put");
@@ -242,11 +231,14 @@ contract HedgeyCeloPuts is ReentrancyGuard {
         //lets check if this is a new ask or new bid
         //if its a newAsk
         if (msg.sender == put.short) {
+            require(_minimumPurchase.mul(_strike).div(10 ** assetDecimals) > 0, "p: minimum purchase error, too small of a minimum");
+            require(_assetAmt % _minimumPurchase == 0, "p: asset amount needs to be a multiple of the minimum");
             uint refund = (put.totalPurch > _totalPurch) ? put.totalPurch.sub(_totalPurch) : _totalPurch.sub(put.totalPurch);
             uint oldPurch = put.totalPurch;
             put.strike = _strike;
             put.totalPurch = _totalPurch;
             put.assetAmt = _assetAmt;
+            put.minimumPurchase = _minimumPurchase;
             put.price = _price;
             put.expiry = _expiry;
             put.tradeable = true;
@@ -257,13 +249,14 @@ contract HedgeyCeloPuts is ReentrancyGuard {
                 require(balCheck >= refund, "p: not enough to change this put option");
                 depositPymt(pymtCurrency, msg.sender, refund);
             }
-            emit OptionChanged(_p, _assetAmt, _strike, _price, _expiry);
+            emit OptionChanged(_p, _assetAmt, _minimumPurchase, _strike, _price, _expiry);
             calculateLastBalances();
 
         } else if (put.short == address(0x0)) {
             //its a newBid
             uint refund = (_price > put.price) ? _price.sub(put.price) : put.price.sub(_price);
             put.assetAmt = _assetAmt;
+            put.minimumPurchase = _assetAmt;
             put.strike = _strike;
             put.expiry = _expiry;
             put.totalPurch = _totalPurch;
@@ -279,7 +272,7 @@ contract HedgeyCeloPuts is ReentrancyGuard {
                 //need to refund the put bidder
                 withdrawPymt(pymtCurrency, put.long, refund);
             }
-            emit OptionChanged(_p, _assetAmt, _strike, _price, _expiry);
+            emit OptionChanged(_p, _assetAmt, _assetAmt, _strike, _price, _expiry);
             calculateLastBalances();    
         }
            
@@ -288,15 +281,17 @@ contract HedgeyCeloPuts is ReentrancyGuard {
 
 
     
-     function newAsk(uint _assetAmt, uint _strike, uint _price, uint _expiry) public {
+     function newAsk(uint _assetAmt, uint _minimumPurchase, uint _strike, uint _price, uint _expiry) public {
         calculateDifferences();
         uint _totalPurch = _assetAmt.mul(_strike).div(10 ** assetDecimals);
         require(_totalPurch > 0, "p totalPurchase error: too small amount");
+        require(_minimumPurchase.mul(_strike).div(10 ** assetDecimals) > 0, "p: minimum purchase error, too small of a min");
+        require(_assetAmt % _minimumPurchase == 0, "p: asset amount needs to be a multiple of the minimum");
         uint balCheck = IERC20(pymtCurrency).balanceOf(msg.sender);
         require(balCheck >= _totalPurch, "p: you dont have enough collateral to write this option");
         depositPymt(pymtCurrency, msg.sender, _totalPurch);
-        puts[p++] = Put(msg.sender, _assetAmt, _strike, _totalPurch, _price, _expiry, false, true, msg.sender, false);
-        emit NewAsk(p.sub(1), _assetAmt, _strike, _price, _expiry);
+        puts[p++] = Put(msg.sender, _assetAmt, _minimumPurchase, _strike, _totalPurch, _price, _expiry, false, true, msg.sender, false);
+        emit NewAsk(p.sub(1), _assetAmt, _minimumPurchase, _strike, _price, _expiry);
         calculateLastBalances();
     }
     
@@ -326,31 +321,33 @@ contract HedgeyCeloPuts is ReentrancyGuard {
         require(msg.sender != put.short, "p: you are the short");
         require(put.short != address(0x0) && put.short == put.long, "p: this is not a newAsk");
         require(!put.open, "p: This put is already open");
-        if(_assetAmt == put.assetAmt) {
+        require(_assetAmt >= put.minimumPurchase, "purchase size does not meet minimum");
+        if (_assetAmt == put.assetAmt) {
+            require(_price == put.price, "p: price mismatch");
             uint balCheck = IERC20(pymtCurrency).balanceOf(msg.sender);
             require(balCheck >= put.price, "p: not enough to buy this put");
             transferPymtWithFee(pymtCurrency, msg.sender, put.short, _price);
+            put.open = true; 
+            put.long = msg.sender; 
+            put.tradeable = false; 
+            emit NewOptionBought(_p);
         } else {
             uint proRataPurchase = _assetAmt.mul(10 ** assetDecimals).div(put.assetAmt);
-            uint proRataPrice = _price.mul(proRataPurchase).div(10 ** assetDecimals);
-            uint remainingPrice = _price.sub(proRataPrice);
+            uint pricePerToken = put.price.mul(10 ** 32).div(put.assetAmt);
+            uint proRataPrice = _assetAmt.mul(pricePerToken).div(10 ** 32);
+            require(_price == proRataPrice, "p: price doesnt match pro rata price");
+            require(put.assetAmt.sub(_assetAmt) >= put.minimumPurchase, "p: remainder too small");
             uint balCheck = IERC20(pymtCurrency).balanceOf(msg.sender);
-            require(balCheck >= proRataPrice, "p: not enough to sell this call option");
+            require(balCheck >= proRataPrice, "p: not enough to buy this put");
             uint proRataTotalPurchase = put.totalPurch.mul(proRataPurchase).div(10 ** assetDecimals);
-            require(proRataTotalPurchase > 0 && put.totalPurch.sub(proRataTotalPurchase) > 0, "p: pro rata purchase error");
             transferPymtWithFee(pymtCurrency, msg.sender, put.short, proRataPrice);
-            //setup new call
-            puts[p++] = Put(put.long, put.assetAmt.sub(_assetAmt), put.strike, put.totalPurch.sub(proRataTotalPurchase), remainingPrice, _expiry, false, true, put.long, false);
-            emit NewAsk(p.sub(1), put.assetAmt.sub(_assetAmt), _strike, remainingPrice, _expiry);
-            put.assetAmt = _assetAmt;
-            put.price = proRataPrice;
-            put.totalPurch = proRataTotalPurchase;
+            puts[p++] = Put(put.short, _assetAmt, put.minimumPurchase, put.strike, proRataTotalPurchase, _price, _expiry, true, false, msg.sender, false);
+            emit PoolOptionBought(_p, p.sub(1), put.assetAmt.sub(_assetAmt), put.minimumPurchase, _strike, _price, _expiry);
+            //update the current call to become the remainder
+            put.assetAmt -= _assetAmt;
+            put.price -= _price;
+            put.totalPurch -= proRataTotalPurchase;
         }
-        
-        put.open = true; 
-        put.long = msg.sender; 
-        put.tradeable = false; 
-        emit NewOptionBought(_p);
     }    
 
 
@@ -372,9 +369,7 @@ contract HedgeyCeloPuts is ReentrancyGuard {
         uint refund = openShort.totalPurch.sub(_price);
         uint feePymt = (_price * fee).div(1e4);
         withdrawPymt(pymtCurrency, ask.long, _price.sub(feePymt));
-        if (feePymt > 0) {
-            SafeERC20.safeTransfer(IERC20(pymtCurrency), feeCollector, feePymt);
-        }
+        if (feePymt > 0) SafeERC20.safeTransfer(IERC20(pymtCurrency), feeCollector, feePymt);
         ask.exercised = true;
         ask.tradeable = false;
         ask.open = false;
@@ -452,7 +447,7 @@ contract HedgeyCeloPuts is ReentrancyGuard {
     }
 
     
-    function cashClose(uint _p, bool dummy) public nonReentrant {
+    function cashClose(uint _p) public nonReentrant {
         calculateDifferences();
         require(cashCloseOn, "p: This is not setup to cash close");
         Put storage put = puts[_p];
@@ -489,7 +484,8 @@ contract HedgeyCeloPuts is ReentrancyGuard {
         calculateLastBalances();
     }
 
-    
+
+    /**    
     function rollExpired(uint _p, uint _assetAmt, uint _newStrike, uint _price, uint _newExpiry) public nonReentrant {
         calculateDifferences();
         Put storage put = puts[_p];
@@ -514,7 +510,7 @@ contract HedgeyCeloPuts is ReentrancyGuard {
         emit OptionRolled(_p, p.sub(1), _assetAmt, _newStrike, _price, _newExpiry);
         calculateLastBalances();
     }
-    
+    **/
     
     
     
@@ -562,20 +558,21 @@ contract HedgeyCeloPuts is ReentrancyGuard {
 
 
     /***events*****/
-    event NewBid(uint _i, uint _assetAmt, uint _strike, uint _price, uint _expiry);
-    event NewAsk(uint _i, uint _assetAmt, uint _strike, uint _price, uint _expiry);
+    event NewBid(uint _i, uint _assetAmt, uint _minimumPurchase, uint _strike, uint _price, uint _expiry);
+    event NewAsk(uint _i, uint _assetAmt, uint _minimumPurchase, uint _strike, uint _price, uint _expiry);
     event NewOptionSold(uint _i);
     event NewOptionBought(uint _i);
     event OpenOptionSold(uint _i, uint _j, address _long, uint _price);
     event OpenShortRePurchased(uint _i, uint _j, address _short, uint _price);
     event OpenOptionPurchased(uint _i);
-    event OptionChanged(uint _i, uint _assetAmt, uint _strike, uint _price, uint _expiry);
+    event OptionChanged(uint _i, uint _assetAmt, uint _minimumPurchase, uint _strike, uint _price, uint _expiry);
     event PriceSet(uint _i, uint _price, bool _tradeable);
     event OptionExercised(uint _i, bool cashClosed);
-    event OptionRolled(uint _i, uint _j, uint _assetAmt, uint _strike, uint _price, uint _expiry);
+    event OptionRolled(uint _i, uint _j, uint _assetAmt, uint _minimumPurchase, uint _strike, uint _price, uint _expiry);
     event OptionReturned(uint _i);
     event OptionCancelled(uint _i);
     event OptionTransferred(uint _i, address newOwner);
+    event PoolOptionBought(uint i, uint _j, uint _assetAmt, uint _minimumPurchase, uint _strike, uint _price, uint _expiry);
     event AMMUpdate(bool _cashCloseOn);
     
 }
@@ -586,8 +583,8 @@ contract HedgeyCeloPuts is ReentrancyGuard {
 contract HedgeyCeloPutsFactory {
     
     mapping(address => mapping(address => address)) public pairs;
-    address[] public totalContracts;
-    address payable public collector;
+    //address[] public totalContracts;
+    address public collector;
     uint public fee;
 
     constructor (address payable _collector, uint _fee) public {
@@ -595,16 +592,12 @@ contract HedgeyCeloPutsFactory {
         fee = _fee;
     }
     
-    function changeFee(uint _newFee) public {
+    function changeFee(uint _newFee, address _collector) public {
         require(msg.sender == collector, "only the collector");
         fee = _newFee;
-    }
-
-    function changeCollector(address payable _collector, bool _set) public {
-        require(msg.sender == collector, "only the collector");
         collector = _collector;
     }
-   
+
     
     function getPair(address asset, address pymtCurrency) public view returns (address pair) {
         pair = pairs[asset][pymtCurrency];
@@ -616,7 +609,7 @@ contract HedgeyCeloPutsFactory {
         require(pairs[asset][pymtCurrency] == address(0), "contract exists");
         HedgeyCeloPuts putContract = new HedgeyCeloPuts(asset, pymtCurrency, collector, fee);
         pairs[asset][pymtCurrency] = address(putContract);
-        totalContracts.push(address(putContract));
+        //totalContracts.push(address(putContract));
         emit NewPairCreated(asset, pymtCurrency, address(putContract));
     }
 
