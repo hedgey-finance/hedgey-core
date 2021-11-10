@@ -505,7 +505,7 @@ contract HedgeyCeloCalls is ReentrancyGuard {
         calculateLastBalances();
     }
 
-    //function to roll expired call into a new short contract
+    /***function to roll expired call into a new short contract
     function rollExpired(uint _c, uint _assetAmt, uint _minimumPurchase, uint _newStrike, uint _price, uint _newExpiry) public nonReentrant {
         calculateDifferences();
         Call storage call = calls[_c]; 
@@ -532,7 +532,7 @@ contract HedgeyCeloCalls is ReentrancyGuard {
         emit OptionRolled(_c, c.sub(1), _assetAmt, _minimumPurchase, _newStrike, _price, _newExpiry);
         calculateLastBalances();
     }
-
+    ****/
 
     //function to transfer an owned call (only long) for the primary purpose of leveraging external swap functions to physically exercise in the case of no cash closing
     function transferAndSwap(uint _c, address newOwner, address[] memory path, bool cashBack) external {
