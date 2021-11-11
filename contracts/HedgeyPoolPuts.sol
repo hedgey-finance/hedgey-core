@@ -11,7 +11,7 @@ interface IWETH {
 
 
 interface IHedgeySwap {
-    function hedgeyCallSwap(address payable originalOwner, uint _c, uint _totalPurchase, address[] memory path, bool cashBack) external;
+    function hedgeyPutSwap(address payable originalOwner, uint _c, uint _totalPurchase, address[] memory path, bool cashBack) external;
 }
 
 
