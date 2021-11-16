@@ -460,48 +460,56 @@ contract HedgeyPuts is ReentrancyGuard {
         emit OptionExercised(_p, true);
     }
     
-    //function to return an expired put back to the short assuming it has not been exercised
-    function returnExpired(uint _p) payable public nonReentrant {
-        Put storage put = puts[_p];
-        require(!put.exercised, "p: This has been exercised");
-        require(put.expiry < now, "p: Not expired yet");
-        require(msg.sender == put.short, "p: You cant do that");
-        put.tradeable = false;
-        put.open = false;
-        put.exercised = true;
-        withdrawPymt(pymtWeth, pymtCurrency, put.short, put.totalPurch);//send back their deposit
-        emit OptionReturned(_p);
-    }
-
-
-    /**
-    //function to roll an expired put into a new one
-    function rollExpired(uint _p, uint _assetAmt, uint _newStrike, uint _price, uint _newExpiry) payable public nonReentrant {
-        Put storage put = puts[_p];
-        require(!put.exercised, "p: This has been exercised");
-        require(put.expiry < now, "p: Not expired yet");
-        require(msg.sender == put.short, "p: You cant do that");
-        require(_newExpiry > now, "p: this is already in the past");
-        uint _totalPurch = (_assetAmt).mul(_newStrike).div(10 ** assetDecimals);
-        require(_totalPurch > 0, "totalPurchase error: too small amount");
-        uint refund = (_totalPurch > put.totalPurch) ? _totalPurch.sub(put.totalPurch) : put.totalPurch.sub(_totalPurch);
-        put.open = false;
-        put.exercised = true;
-        put.tradeable = false;
-        if (_totalPurch > put.totalPurch) {
-            uint balCheck = pymtWeth ? msg.value : IERC20(pymtCurrency).balanceOf(msg.sender);
-            require(balCheck >= refund, "p: you dont have enough collateral to sell this option");
-            depositPymt(pymtWeth, pymtCurrency, msg.sender, refund);
-        } else if (_totalPurch < put.totalPurch) {
-            withdrawPymt(pymtWeth, pymtCurrency, msg.sender, refund);
+    function returnExpired(uint[] memory _puts) public nonReentrant {
+        uint _totalPurchaseLocked;
+        for (uint i; i < _puts.length; i++) {
+            Put storage put = puts[_puts[i]];
+            require(!put.exercised && put.expiry < now && msg.sender == put.short);
+            put.exercised = true;
+            put.open = false;
+            put.tradeable = false;
+            _totalPurchaseLocked += put.totalPurch;
+            emit OptionReturned(_puts[i]);
         }
-        puts[p++] = Put(msg.sender, _assetAmt, _newStrike, _totalPurch, _price, _newExpiry, false, true, msg.sender, false);
-        emit OptionRolled(_p, p.sub(1), _assetAmt, _newStrike, _price, _newExpiry);
+        withdrawPymt(pymtWeth, pymtCurrency, msg.sender, _totalPurchaseLocked);
+        
     }
-
-    ****/
     
-    //function to transfer an owned call (only long) for the primary purpose of leveraging external swap functions to physically exercise in the case of no cash closing
+    function rollExpired(uint[] memory _puts, uint _assetAmount, uint _minimumPurchase, uint _newStrike, uint _newPrice, uint _newExpiry) payable public {
+        uint _totalAssetAmount;
+        uint _totalPurchaseLocked;
+        for (uint i; i < _puts.length; i++) {
+            Put storage put = puts[_puts[i]];
+            require(!put.exercised && put.expiry < now && msg.sender == put.short);
+            put.exercised = true;
+            put.open = false;
+            put.tradeable = false;
+            _totalAssetAmount += put.assetAmt;
+            _totalPurchaseLocked += put.totalPurch;
+            emit OptionReturned(_puts[i]);
+        }
+        require(_assetAmount % _minimumPurchase == 0 && _assetAmount >= _totalAssetAmount);
+        uint _totalPurch = (_assetAmount).mul(_newStrike).div(10 ** assetDecimals);
+        require(_totalPurch > 0 && _minimumPurchase.mul(_newStrike).div(10 ** assetDecimals) > 0);
+        //only allow the writer to upsize, and pull in the additional funds required to collateralize
+        uint difference = (_totalPurch > _totalPurchaseLocked) ? _totalPurch.sub(_totalPurchaseLocked) : _totalPurchaseLocked.sub(_totalPurch);
+        if (_totalPurch > _totalPurchaseLocked) {
+            uint balCheck = pymtWeth ? msg.value : IERC20(pymtCurrency).balanceOf(msg.sender);
+            require(balCheck >= difference);
+            depositPymt(pymtWeth, pymtCurrency, msg.sender, difference);
+        } else if (_totalPurch < _totalPurchaseLocked) {
+            withdrawPymt(pymtWeth, pymtCurrency, msg.sender, difference);
+        }
+        puts[p++] = Put(msg.sender, _assetAmount, _minimumPurchase, _newStrike, _totalPurch, _newPrice, _newExpiry, false, true, msg.sender, false);
+        emit NewAsk(p.sub(1), _assetAmount, _minimumPurchase, _newStrike, _newPrice, _newExpiry);
+    }
+    
+   
+    
+    
+    //************SWAP SPECIFIC FUNCTIONS USED FOR THE CASH CLOSE METHODS***********************/
+    
+     //function to transfer an owned call (only long) for the primary purpose of leveraging external swap functions to physically exercise in the case of no cash closing
     function transferAndSwap(uint _p, address payable newOwner, address[] memory path) external {
         Put storage put = puts[_p];
         require(put.expiry >= block.timestamp, "p: This put is already expired");
@@ -520,9 +528,6 @@ contract HedgeyPuts is ReentrancyGuard {
         
         emit OptionTransferred(_p, newOwner);
     }
-    
-    
-    //************SWAP SPECIFIC FUNCTIONS USED FOR THE CASH CLOSE METHODS***********************/
 
     //function to swap from this contract to uniswap pool
     function swap(address token, uint out, uint _in, address to) internal {
