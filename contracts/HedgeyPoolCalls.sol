@@ -511,6 +511,7 @@ contract HedgeyCalls is ReentrancyGuard {
         require(_assetAmount % _minimumPurchase == 0 && _assetAmount >= _totalAssetAmount);
         uint _totalPurch = (_assetAmount).mul(_newStrike).div(10 ** assetDecimals);
         require(_totalPurch > 0 && _minimumPurchase.mul(_newStrike).div(10 ** assetDecimals) > 0);
+        require(_newExpiry > block.timestamp);
         //only allow the writer to upsize, and pull in the additional funds required to collateralize
         if (_assetAmount > _totalAssetAmount) {
             uint balCheck = assetWeth ? msg.value : IERC20(pymtCurrency).balanceOf(msg.sender);
