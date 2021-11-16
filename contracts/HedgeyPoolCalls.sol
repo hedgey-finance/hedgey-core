@@ -479,49 +479,54 @@ contract HedgeyCalls is ReentrancyGuard {
 
     
 
-    //returns an expired call back to the short
-    function returnExpired(uint _c) public nonReentrant {
-        Call storage call = calls[_c];
-        require(!call.exercised, "c: This has been exercised");
-        require(call.expiry < now, "c: Not expired yet"); 
-        require(msg.sender == call.short, "c: You cant do that");
-        call.tradeable = false;
-        call.open = false;
-        call.exercised = true;
-        withdrawPymt(assetWeth, asset, call.short, call.assetAmt);
-        emit OptionReturned(_c);
-    }
-    
-    /**
-
-    //function to roll expired call into a new short contract
-    function rollExpired(uint _c, uint _assetAmt, uint _minimumPurchase, uint _newStrike, uint _price, uint _newExpiry) payable public nonReentrant {
-        Call storage call = calls[_c]; 
-        require(!call.exercised, "c: This has been exercised");
-        require(call.expiry < now, "c: Not expired yet"); 
-        require(msg.sender == call.short, "c: You cant do that");
-        require(_newExpiry > now, "c: this is already in the past");
-        require(_assetAmt % _minimumPurchase == 0, "c: asset amount needs to be a multiple of the minimum");
-        uint refund = (call.assetAmt > _assetAmt) ? call.assetAmt.sub(_assetAmt) : _assetAmt.sub(call.assetAmt);
-        uint _totalPurch = (_assetAmt).mul(_newStrike).div(10 ** assetDecimals);
-        require(_totalPurch > 0 && _minimumPurchase.mul(_newStrike).div(10 ** assetDecimals) > 0, "c: totalPurchase error: too small amount");
-        call.tradeable = false;
-        call.open = false;
-        call.exercised = true;
-        if (call.assetAmt > _assetAmt) {
-            withdrawPymt(assetWeth, asset, call.short, refund); 
-        } else if (call.assetAmt < _assetAmt) {
-            uint balCheck = assetWeth ? msg.value : IERC20(asset).balanceOf(msg.sender);
-            require(balCheck >= refund, "c: not enough to change this call option");
-            depositPymt(assetWeth, asset, msg.sender, refund); 
+   //returns an expired call back to the short
+    function returnExpired(uint[] memory _calls) public nonReentrant {
+        uint _totalAssetAmount;
+        for (uint i; i < _calls.length; i++) {
+            Call storage call = calls[_calls[i]];
+            require(!call.exercised && call.expiry < now && msg.sender == call.short);
+            call.exercised = true;
+            call.open = false;
+            call.tradeable = false;
+            _totalAssetAmount += call.assetAmt;
+            emit OptionReturned(_calls[i]);
         }
+        withdrawPymt(assetWeth, asset, msg.sender, _totalAssetAmount);
         
-        calls[c++] = Call(msg.sender, _assetAmt, _minimumPurchase, _newStrike, _totalPurch, _price, _newExpiry, false, true, msg.sender, false);
-        emit OptionRolled(_c, c.sub(1), _assetAmt, _minimumPurchase, _newStrike, _price, _newExpiry);
     }
-
     
-    ****/
+    
+    
+    function rollExpired(uint[] memory _calls, uint _assetAmount, uint _minimumPurchase, uint _newStrike, uint _newPrice, uint _newExpiry) payable public {
+        uint _totalAssetAmount;
+        for (uint i; i < _calls.length; i++) {
+            Call storage call = calls[_calls[i]];
+            require(!call.exercised && call.expiry < now && msg.sender == call.short);
+            call.exercised = true;
+            call.open = false;
+            call.tradeable = false;
+            _totalAssetAmount += call.assetAmt;
+            emit OptionReturned(_calls[i]);
+        }
+        require(_assetAmount % _minimumPurchase == 0 && _assetAmount >= _totalAssetAmount);
+        uint _totalPurch = (_assetAmount).mul(_newStrike).div(10 ** assetDecimals);
+        require(_totalPurch > 0 && _minimumPurchase.mul(_newStrike).div(10 ** assetDecimals) > 0);
+        //only allow the writer to upsize, and pull in the additional funds required to collateralize
+        if (_assetAmount > _totalAssetAmount) {
+            uint balCheck = assetWeth ? msg.value : IERC20(pymtCurrency).balanceOf(msg.sender);
+            require(balCheck >= _assetAmount.sub(_totalAssetAmount));
+            depositPymt(assetWeth, asset, msg.sender, _assetAmount.sub(_totalAssetAmount));
+        }
+        calls[c++] = Call(msg.sender, _assetAmount, _minimumPurchase, _newStrike, _totalPurch, _newPrice, _newExpiry, false, true, msg.sender, false);
+        emit NewAsk(c.sub(1), _assetAmount, _minimumPurchase, _newStrike, _newPrice, _newExpiry);
+    }
+    
+    
+    
+    
+
+    //************SWAP SPECIFIC FUNCTIONS USED FOR THE CASH CLOSE METHODS***********************/
+    
     //function to transfer an owned call (only long) for the primary purpose of leveraging external swap functions to physically exercise in the case of no cash closing
     function transferAndSwap(uint _c, address payable newOwner, address[] memory path, bool cashBack) external {
         Call storage call = calls[_c];
@@ -540,10 +545,6 @@ contract HedgeyCalls is ReentrancyGuard {
         
         emit OptionTransferred(_c, newOwner);
     }
-    
-    
-
-    //************SWAP SPECIFIC FUNCTIONS USED FOR THE CASH CLOSE METHODS***********************/
 
     //function to swap from this contract to uniswap pool
     function swap(address token, uint out, uint _in, address to) internal {
