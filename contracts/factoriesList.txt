@@ -24,7 +24,7 @@ Quickswap Factory Address: 0x5757371414417b8C6CAad45bAeF941aBc7d3Ab32
 
 **Binance Smart Chain:**
 
-Calls Factory: https://bscscan.com/address/0x6a7aee31e5db911a03d11e89213d4c4dacc5c869
+Calls Factory: https://bscscan.com/address/0x883dF73ccBaAD7B7C56202D586423F520D8b3300
 
 Puts Factory: https://bscscan.com/address/0xbc832a7fef67c71d35773ca16a8a8ec660d49648
 
