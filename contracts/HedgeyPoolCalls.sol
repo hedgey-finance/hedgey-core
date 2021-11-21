@@ -41,9 +41,7 @@ contract HedgeyCalls is ReentrancyGuard {
         fee = _fee;
         assetDecimals = IERC20(_asset).decimals();
         uniPair = IUniswapV2Factory(uniFactory).getPair(asset, pymtCurrency);
-        if (uniPair == address(0x0)) {
-            cashCloseOn = false;
-        } else {
+        if (uniPair != address(0x0)) {
             cashCloseOn = true;
         }
         
